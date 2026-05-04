@@ -91,6 +91,10 @@ def main() -> None:
     # General Learner Chat handler (MUST be added after all command handlers)
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), learner_chat_handler))
 
+    # Keep alive dummy server for Render's port binding check.
+    from dummy_server import keep_alive
+    keep_alive()
+
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
