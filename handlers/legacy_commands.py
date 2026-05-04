@@ -16,10 +16,11 @@ async def revise(update: Update, context: ContextTypes.DEFAULT_TYPE):
     vocab = lesson.get("vocab")
     idiom = lesson.get("idiom")
     gk = lesson.get("gk_fact")
+    current_affairs = lesson.get("current_affairs")
     
-    if not (vocab or idiom or gk):
+    if not (vocab or idiom or gk or current_affairs):
         await update.message.reply_text(
-            "<b>No intel logged yet today.</b> Wait for your morning brief, idiom, or GK shot.",
+            "<b>No intel logged yet today.</b> Wait for your morning brief, idiom, GK shot, or current affairs.",
             parse_mode="HTML"
         )
         return
@@ -30,7 +31,9 @@ async def revise(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if idiom:
         parts.append(f"IDIOM: {idiom}")
     if gk:
-        parts.append(f"GK: {gk}")
+        parts.append(f"STATIC GK: {gk}")
+    if current_affairs:
+        parts.append(f"CURRENT AFFAIRS: {current_affairs}")
     
     context_str = "\n\n".join(parts)
     prompt = (
@@ -80,7 +83,8 @@ async def debug_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <b>DAILY MEMORY STATUS</b>
 Vocab: {'✅' if lesson.get('vocab') else '❌'}
 Idiom: {'✅' if lesson.get('idiom') else '❌'}
-GK: {'✅' if lesson.get('gk_fact') else '❌'}
+Static GK: {'✅' if lesson.get('gk_fact') else '❌'}
+Current Affairs: {'✅' if lesson.get('current_affairs') else '❌'}
 
 <b>ACTIVE JOBS</b>
 {', '.join(job_names) if job_names else 'None'}
@@ -101,6 +105,11 @@ async def manual_gk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from jobs.daily_scheduler import send_gk_shot
     await update.message.reply_text("Triggering GK shot...", parse_mode="HTML")
     await send_gk_shot(context, manual_chatid=update.effective_chat.id)
+
+async def manual_ca(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from jobs.daily_scheduler import send_current_affairs_shot
+    await update.message.reply_text("Triggering Current Affairs shot...", parse_mode="HTML")
+    await send_current_affairs_shot(context, manual_chatid=update.effective_chat.id)
 
 async def week_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from config import ADMIN_ID

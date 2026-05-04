@@ -10,10 +10,10 @@ from handlers.learner import start_command, help_command
 from handlers.gamification import leaderboard_command
 from handlers.chat import learner_chat_handler
 
-from handlers.legacy_commands import revise, debug_status, testquiz, manual_idiom, manual_gk, week_pdf, trigger_review
+from handlers.legacy_commands import revise, debug_status, testquiz, manual_idiom, manual_gk, manual_ca, week_pdf, trigger_review
 from handlers.quiz_handler import quiz_callback, explain_callback
 from jobs.daily_scheduler import (
-    send_daily_brief, send_idiom_drop, send_gk_shot,
+    send_vocab_shot, send_idiom_drop, send_gk_shot, send_current_affairs_shot,
     send_pop_quiz, send_nightly_recap
 )
 
@@ -27,9 +27,9 @@ async def post_init(application: Application):
     """Schedule the legacy global daily jobs."""
     IST = pytz.timezone('Asia/Kolkata')
     
-    # 08:00 AM - Daily Brief
+    # 08:00 AM - Vocab Shot
     application.job_queue.run_daily(
-        send_daily_brief,
+        send_vocab_shot,
         time=datetime.time(hour=8, minute=0, tzinfo=IST)
     )
     # 10:00 AM - Idiom Drop
@@ -41,6 +41,11 @@ async def post_init(application: Application):
     application.job_queue.run_daily(
         send_gk_shot,
         time=datetime.time(hour=12, minute=0, tzinfo=IST)
+    )
+    # 14:00 PM - Current Affairs Shot
+    application.job_queue.run_daily(
+        send_current_affairs_shot,
+        time=datetime.time(hour=14, minute=0, tzinfo=IST)
     )
     # 07:00 PM - Pop Quiz
     application.job_queue.run_daily(
@@ -70,6 +75,7 @@ def main() -> None:
     application.add_handler(CommandHandler("testquiz", testquiz))
     application.add_handler(CommandHandler("idiom", manual_idiom))
     application.add_handler(CommandHandler("gk", manual_gk))
+    application.add_handler(CommandHandler("ca", manual_ca))
     application.add_handler(CommandHandler("weekpdf", week_pdf))
     application.add_handler(CommandHandler("weekreview", trigger_review))
 

@@ -53,6 +53,12 @@ async def catchup_gk(context: ContextTypes.DEFAULT_TYPE):
     if content:
         await _send_catchup(context, "1200 HRS TACTICAL GK", content)
 
+async def catchup_current_affairs(context: ContextTypes.DEFAULT_TYPE):
+    row = load_today_lesson()
+    content = row.get("current_affairs")
+    if content:
+        await _send_catchup(context, "1400 HRS CURRENT AFFAIRS", content)
+
 async def catchup_warning(context: ContextTypes.DEFAULT_TYPE):
     await _send_catchup(
         context,
@@ -94,7 +100,7 @@ async def broadcast_mission_brief(context, brief_text, is_manual=False, manual_c
         except Exception as e:
             logger.error(f"Delivery failed for {chat_id}: {e}")
 
-async def send_daily_brief(context, manual_chatid: int = None):
+async def send_vocab_shot(context, manual_chatid: int = None):
     now = get_ist_now()
 
     if not manual_chatid and (now.hour < 7 or now.hour >= 21):
@@ -111,7 +117,7 @@ async def send_daily_brief(context, manual_chatid: int = None):
             "• <b>[Word 1]</b> - meaning.\n"
             "Synonyms: x, y; Antonyms: a, b\n"
             "<i>Ex: [Formal example sentence]</i>\n\n"
-            # generate 3 words
+            "Generate exactly 3 words."
         )
         response = await gemini_client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         
@@ -141,11 +147,19 @@ async def send_idiom_drop(context, manual_chatid: int = None):
 
 async def send_gk_shot(context, manual_chatid: int = None):
     try:
-        prompt = "Create a Static GK and Current affairs drop. Use ONLY <b> tags, no markdown."
+        prompt = (
+            "Create a Static GK shot covering politics, static gk, geography, and history points for AFCAT.\n"
+            "Use ONLY <b> tags, no markdown.\n"
+            "FORMAT:\n"
+            "🗺️ <b>STATIC GK DRILL</b>\n\n"
+            "• <b>Politics:</b> [Fact]\n"
+            "• <b>History:</b> [Fact]\n"
+            "• <b>Geography:</b> [Fact]\n"
+            "• <b>Misc:</b> [Fact]\n"
+        )
         response = await gemini_client.aio.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
-            config=types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
         )
         
         get_or_init_today_lesson()
@@ -167,13 +181,49 @@ async def send_gk_shot(context, manual_chatid: int = None):
     except Exception as e:
         logger.error(f"GK Shot failed: {e}")
 
+async def send_current_affairs_shot(context, manual_chatid: int = None):
+    try:
+        prompt = (
+            "Create a Daily Current Affairs drop for AFCAT. Focus on Defence, Sports, and National news.\n"
+            "Use ONLY <b> tags, no markdown.\n"
+            "FORMAT:\n"
+            "📰 <b>CURRENT AFFAIRS SHOT</b>\n\n"
+            "• <b>Defence:</b> [News]\n"
+            "• <b>Sports:</b> [News]\n"
+            "• <b>National:</b> [News]\n"
+        )
+        response = await gemini_client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
+        )
+        
+        get_or_init_today_lesson()
+        update_today_lesson({"current_affairs": response.text})
+
+        raw_text = response.text
+        audio_bytes, audio_type = await generate_tts_audio_once(raw_text)
+        targets = get_target_users(manual_chatid)
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔍 Explain Context", callback_data="explaingk")]])
+
+        safe_text = to_telegram_html(raw_text)
+
+        for u in targets:
+            chat_id = u["telegram_id"]
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=safe_text, reply_markup=reply_markup, parse_mode="HTML")
+            except Exception: pass
+            
+    except Exception as e:
+        logger.error(f"Current Affairs Shot failed: {e}")
+
 async def send_pop_quiz(context, manual_chatid: int = None):
     lesson = load_today_lesson() or {}
-    context_str = f"Vocab: {lesson.get('vocab')}\nIdiom: {lesson.get('idiom')}\nGK: {lesson.get('gk_fact')}"
+    context_str = f"Vocab: {lesson.get('vocab')}\nIdiom: {lesson.get('idiom')}\nGK: {lesson.get('gk_fact')}\nCurrent Affairs: {lesson.get('current_affairs')}"
 
     prompt = (
         f"Based on today's content:\n{context_str}\n\n"
-        "Generate 3 distinct multiple-choice questions.\n"
+        "Generate 4 distinct multiple-choice questions (1 vocab, 1 idiom, 1 gk, 1 current affairs).\n"
         "STRICT FORMATTING RULE: Separate each field with a single pipe '|'.\n"
         "Question Text | Option A | Option B | Option C | Option D | Correct: Letter | Brief Explanation\n"
         "Separate each question with '###'.\n"

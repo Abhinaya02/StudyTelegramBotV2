@@ -1,13 +1,13 @@
-import fitz  # PyMuPDF
 import os
+from pypdf import PdfReader
 
 def extract_text_from_pdf(file_path: str) -> str:
     """Extracts text from a local PDF file."""
     text = ""
     try:
-        with fitz.open(file_path) as pdf:
-            for page in pdf:
-                text += page.get_text() + "\n"
+        reader = PdfReader(file_path)
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
         return text.strip()
     except Exception as e:
         print(f"Error reading PDF: {e}")
