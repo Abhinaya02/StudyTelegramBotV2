@@ -96,6 +96,11 @@ async def testquiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Testing pop quiz...", parse_mode="HTML")
     await send_pop_quiz(context, manual_chatid=update.effective_chat.id)
 
+async def manual_vocab(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from jobs.daily_scheduler import send_vocab_shot
+    await update.message.reply_text("Triggering vocab shot...", parse_mode="HTML")
+    await send_vocab_shot(context, manual_chatid=update.effective_chat.id)
+
 async def manual_idiom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from jobs.daily_scheduler import send_idiom_drop
     await update.message.reply_text("Triggering idiom drop...", parse_mode="HTML")

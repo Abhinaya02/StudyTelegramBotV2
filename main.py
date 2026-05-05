@@ -10,7 +10,7 @@ from handlers.learner import start_command, help_command
 from handlers.gamification import leaderboard_command
 from handlers.chat import learner_chat_handler
 
-from handlers.legacy_commands import revise, debug_status, testquiz, manual_idiom, manual_gk, manual_ca, week_pdf, trigger_review
+from handlers.legacy_commands import revise, debug_status, testquiz, manual_vocab, manual_idiom, manual_gk, manual_ca, week_pdf, trigger_review
 from handlers.quiz_handler import quiz_callback, explain_callback
 from jobs.daily_scheduler import (
     send_vocab_shot, send_idiom_drop, send_gk_shot, send_current_affairs_shot,
@@ -73,6 +73,7 @@ def main() -> None:
     application.add_handler(CommandHandler("revise", revise))
     application.add_handler(CommandHandler("debug", debug_status))
     application.add_handler(CommandHandler("testquiz", testquiz))
+    application.add_handler(CommandHandler("vocab", manual_vocab))
     application.add_handler(CommandHandler("idiom", manual_idiom))
     application.add_handler(CommandHandler("gk", manual_gk))
     application.add_handler(CommandHandler("ca", manual_ca))
