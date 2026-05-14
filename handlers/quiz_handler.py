@@ -8,7 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from database.client import load_user_progress, supabase
-from services.gemini import client as gemini_client
+from services.gemini import client as gemini_client, generate_content_with_fallback_async
 from utils.formatting import markdown_bold_to_html, to_telegram_html, split_by_length
 
 # Global quiz session memory
@@ -43,6 +43,16 @@ async def send_next_quiz_question(context: ContextTypes.DEFAULT_TYPE, chat_id: i
             user_session["logged_active_today"] = ist_date
             db_needs_update = True
 
+        from handlers.gamification import add_xp
+        
+        earned_xp = score * 10
+        total_xp = earned_xp
+        try:
+            if earned_xp > 0:
+                total_xp = await add_xp(chat_id, amount=earned_xp)
+        except Exception as e:
+            logging.error(f"Failed to add XP: {e}")
+
         if score >= total_q - 1 and total_q > 0:
             last_date = progress.get("last_correct_date")
             
@@ -54,10 +64,10 @@ async def send_next_quiz_question(context: ContextTypes.DEFAULT_TYPE, chat_id: i
             else:
                 new_streak = progress.get("streak", 0)
                 
-            progress_text = f"\n\n🔥Excellent work, Officer. Streak: {new_streak}!"
+            progress_text = f"\n\n🔥Excellent work, Officer.\nEarned XP: {earned_xp}\nStreak: {new_streak}!"
         else:
             progress_text = (
-                "\n\nRevise today's shots to sharpen your sword.\n"
+                f"\n\nEarned XP: {earned_xp}\nRevise today's shots to sharpen your sword.\n"
                 "/revise to pull your revision sheet, or /testquiz to try again."
             )
 
@@ -224,28 +234,31 @@ async def explain_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     original_text = query.message.text
     
-    prompt = f"""Provide a SHORT, exam-focused deep dive into these GK/News items for AFCAT.
-Use ONLY these HTML tags: <b> and </b>. No other HTML, no Markdown.
-Keep it concise and skimmable for Telegram.
+    prompt = f"""Provide a SHORT, High-Yield Tactical Deep Dive into these GK/News items for an AFCAT aspirant.
+🛠️ VERACITY PROTOCOL: Verify facts internally. Ensure accuracy of dates, names, and military terms.
+
+🚨 CRITICAL FORMATTING RULES:
+1. Use ONLY <b> for bold and <i> for italics.
+2. ABSOLUTELY NO MARKDOWN (* or **). NO other HTML.
+3. Keep it concise, professional, and skimmable for an officer candidate.
 
 INPUT:
 {original_text}
 
 OUTPUT FORMAT (STRICT):
-<b>GK TACTICAL SHOT - DEEP DIVE</b>
+<b>🔍 GK TACTICAL DEEP DIVE</b>
 
-1) <b>Title</b>
-   - fact 1
-   - fact 2
-   - defence relevance
+1️⃣ <b>[Title/Subject]</b>
+   - <i>Fact:</i> Concise explanation (max 15 words).
+   - <i>Defense Relevance:</i> Why it matters for AFCAT (max 15 words).
 
 Rules:
-- Each bullet max 18-20 words.
-- No HTML tags other than <b>.
+- Max 3-4 items if multiple found.
+- No HTML tags other than <b> and <i>.
 """
     
-    response = await gemini_client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-    deep_dive = to_telegram_html(response.text or "")
+    response_text = await generate_content_with_fallback_async(contents=prompt)
+    deep_dive = to_telegram_html(response_text or "")
     
     full_text = f"<b>DEEP DIVE</b>\n\n{deep_dive}"
     

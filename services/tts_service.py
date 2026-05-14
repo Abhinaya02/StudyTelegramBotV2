@@ -21,7 +21,7 @@ async def generate_tts_audio_once(text: str) -> tuple[bytes | None, str]:
 
     for attempt in range(3):
         try:
-            tts_prompt = f"As a professional news reporter, say the following fast: {text}"
+            tts_prompt = f"As an Air Force Intelligence Officer delivering a tactical briefing, say the following with authority and precision: {text}"
             response = await client.aio.models.generate_content(
                 model="gemini-2.5-flash-preview-tts",
                 contents=tts_prompt,
@@ -69,9 +69,11 @@ async def generate_tts_audio_once(text: str) -> tuple[bytes | None, str]:
                 return audio_stream.getvalue(), "Neural"
 
         except Exception as e:
-            if "500" in str(e):
+            if "500" in str(e) or "503" in str(e):
+                logger.warning(f"TTS API Error: {e}, retrying in 5 seconds...")
                 await asyncio.sleep(5)
             else:
+                logger.warning(f"TTS API Error: {e}, falling back to gTTS")
                 break
 
     return await _fallback_gtts(text)

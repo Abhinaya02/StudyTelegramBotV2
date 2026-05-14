@@ -11,7 +11,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from google.genai import types
-from services.gemini import client as gemini_client
+from services.gemini import client as gemini_client, generate_content_with_fallback_async
 from services.tts_service import generate_tts_audio_once
 from database.client import supabase, get_or_init_today_lesson, load_today_lesson, update_today_lesson, get_target_users, load_user_progress
 from utils.formatting import to_telegram_html, split_by_length
@@ -119,12 +119,12 @@ async def send_vocab_shot(context, manual_chatid: int = None):
             "<i>Ex: [Formal example sentence]</i>\n\n"
             "Generate exactly 3 words."
         )
-        response = await gemini_client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response_text = await generate_content_with_fallback_async(contents=prompt)
         
         get_or_init_today_lesson()
-        update_today_lesson({"vocab": response.text})
+        update_today_lesson({"vocab": response_text})
 
-        await broadcast_mission_brief(context, response.text, is_manual=bool(manual_chatid), manual_chatid=manual_chatid)
+        await broadcast_mission_brief(context, response_text, is_manual=bool(manual_chatid), manual_chatid=manual_chatid)
     except Exception as e:
         logger.error(f"Scheduled brief failed: {e}")
 
@@ -136,12 +136,12 @@ async def send_idiom_drop(context, manual_chatid: int = None):
             "🎯 <b>TACTICAL IDIOM</b>\n"
             "1) <b>[Idiom 1]</b> - Meaning.\nExample: <i>[Short example sentence]</i>\n\n"
         )
-        response = await gemini_client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response_text = await generate_content_with_fallback_async(contents=prompt)
         
         get_or_init_today_lesson()
-        update_today_lesson({"idiom": response.text})
+        update_today_lesson({"idiom": response_text})
 
-        await broadcast_mission_brief(context, response.text, is_manual=bool(manual_chatid), manual_chatid=manual_chatid)
+        await broadcast_mission_brief(context, response_text, is_manual=bool(manual_chatid), manual_chatid=manual_chatid)
     except Exception as e:
         logger.error(f"Idiom drop failed: {e}")
 
@@ -157,15 +157,14 @@ async def send_gk_shot(context, manual_chatid: int = None):
             "• <b>Geography:</b> [Fact]\n"
             "• <b>Misc:</b> [Fact]\n"
         )
-        response = await gemini_client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+        response_text = await generate_content_with_fallback_async(
             contents=prompt,
         )
         
         get_or_init_today_lesson()
-        update_today_lesson({"gk_fact": response.text})
+        update_today_lesson({"gk_fact": response_text})
 
-        raw_text = response.text
+        raw_text = response_text
         audio_bytes, audio_type = await generate_tts_audio_once(raw_text)
         targets = get_target_users(manual_chatid)
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔍 Explain Context", callback_data="explaingk")]])
@@ -176,6 +175,10 @@ async def send_gk_shot(context, manual_chatid: int = None):
             chat_id = u["telegram_id"]
             try:
                 await context.bot.send_message(chat_id=chat_id, text=safe_text, reply_markup=reply_markup, parse_mode="HTML")
+                if audio_bytes:
+                    stream = BytesIO(audio_bytes)
+                    caption = "🎙️ NEURAL MISSION BRIEF" if audio_type == "Neural" else "gTTS Fallback Brief"
+                    await context.bot.send_voice(chat_id=chat_id, voice=stream, caption=caption)
             except Exception: pass
             
     except Exception as e:
@@ -192,16 +195,15 @@ async def send_current_affairs_shot(context, manual_chatid: int = None):
             "• <b>Sports:</b> [News]\n"
             "• <b>National:</b> [News]\n"
         )
-        response = await gemini_client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+        response_text = await generate_content_with_fallback_async(
             contents=prompt,
             config=types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
         )
         
         get_or_init_today_lesson()
-        update_today_lesson({"current_affairs": response.text})
+        update_today_lesson({"current_affairs": response_text})
 
-        raw_text = response.text
+        raw_text = response_text
         audio_bytes, audio_type = await generate_tts_audio_once(raw_text)
         targets = get_target_users(manual_chatid)
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔍 Explain Context", callback_data="explaingk")]])
@@ -212,6 +214,10 @@ async def send_current_affairs_shot(context, manual_chatid: int = None):
             chat_id = u["telegram_id"]
             try:
                 await context.bot.send_message(chat_id=chat_id, text=safe_text, reply_markup=reply_markup, parse_mode="HTML")
+                if audio_bytes:
+                    stream = BytesIO(audio_bytes)
+                    caption = "🎙️ NEURAL MISSION BRIEF" if audio_type == "Neural" else "gTTS Fallback Brief"
+                    await context.bot.send_voice(chat_id=chat_id, voice=stream, caption=caption)
             except Exception: pass
             
     except Exception as e:
@@ -230,8 +236,8 @@ async def send_pop_quiz(context, manual_chatid: int = None):
     )
 
     try:
-        response = await gemini_client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        raw_text = (response.text or "").strip()
+        response_text = await generate_content_with_fallback_async(contents=prompt)
+        raw_text = (response_text or "").strip()
         quiz_blocks = [b for b in re.split(r'###|\n\n\n', raw_text) if '|' in b]
         
         if not quiz_blocks:

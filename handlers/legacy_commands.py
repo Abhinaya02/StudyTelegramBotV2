@@ -3,7 +3,7 @@ import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from services.gemini import client as gemini_client
+from services.gemini import client as gemini_client, generate_content_with_fallback_async
 from google.genai import types
 from utils.formatting import to_telegram_html
 from utils.time_helper import get_ist_now
@@ -37,14 +37,14 @@ async def revise(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     context_str = "\n\n".join(parts)
     prompt = (
-        "Create a SHORT AFCAT revision sheet from the content below.\n"
-        "Use ONLY <b> and line breaks. No Markdown (* or **).\n\n"
+        "Create a HIGH-DENSITY AFCAT REVISION SHEET from the content provided.\n"
+        "Tone: Professional, disciplined, and mission-oriented.\n"
+        "STRICT RULE: Use ONLY <b> and line breaks for formatting. NO Markdown (* or **).\n\n"
         "FORMAT (STRICT):\n"
-        "<b>🔁 QUICK REVISION</b>\n"
-        "• [point 1]\n"
-        "• [point 2]\n"
-        "• [point 3]\n"
-        "Max 7 bullets, each under 18–20 words.\n\n"
+        "<b>🔁 TACTICAL REVISION SUMMARY</b>\n"
+        "• <b>[Key Topic]:</b> Concise summary (max 15 words).\n"
+        "• <b>[Key Topic]:</b> Concise summary (max 15 words).\n"
+        "Max 7 bullets total. Focus on facts likely to appear in AFCAT.\n\n"
         f"CONTENT:\n{context_str}"
     )
     
@@ -52,11 +52,8 @@ async def revise(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not gemini_client:
             raise ValueError("Gemini client not initialized")
             
-        response = await gemini_client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        text = to_telegram_html(response.text or "")
+        response_text = await generate_content_with_fallback_async(contents=prompt)
+        text = to_telegram_html(response_text or "")
         await update.message.reply_text(text, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Revise failed: {e}")

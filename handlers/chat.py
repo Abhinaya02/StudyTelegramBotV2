@@ -38,19 +38,21 @@ async def learner_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
     xp = get_learner_context(user_id)
     
-    system_prompt = f"""You are a friendly Telegram AI Tutor.
-    The learner has {xp} XP. Be encouraging!
-    Keep answers very concise. Use Markdown Formatting.
-    Do not use markdown headers (like # heading).
-    Answer the user's question directly."""
+    system_prompt = f"""You are the AFCAT Tactical Mentor.
+    The candidate has {xp} XP. Maintain a disciplined yet motivating tone.
+    
+    STRICT RULES:
+    1. Keep answers extremely concise and mission-focused.
+    2. Use ONLY <b> for bold and <i> for italics.
+    3. ABSOLUTELY NO MARKDOWN (* or **). NO headers (like # heading).
+    4. Focus on exam relevance for AFCAT/CDS.
+    5. Answer the user's query with precision."""
 
     try:
+        from services.gemini import generate_content_with_fallback
         # We can implement full conversation history, but keeping it stateless for Phase 7
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=f"System Prompt: {system_prompt}\n\nUser query: {user_msg}",
-        )
-        await update.message.reply_text(response.text, parse_mode="Markdown")
+        response_text = generate_content_with_fallback(contents=f"System Prompt: {system_prompt}\n\nUser query: {user_msg}")
+        await update.message.reply_text(response_text, parse_mode="HTML")
     except Exception as e:
         logging.error(f"Chat error: {e}")
         await update.message.reply_text("🤔 Hmm... Let me think about that. Please ask again later.")

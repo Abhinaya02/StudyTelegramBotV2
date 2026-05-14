@@ -5,15 +5,15 @@ import requests
 from telegram.ext import ContextTypes
 
 from database.client import supabase
-from config import API2PDF_KEY
 from services.gemini import client
 
 logger = logging.getLogger(__name__)
 
-def build_weekly_pdf_cloud(html_content: str) -> BytesIO:
-    if not API2PDF_KEY:
-        raise Exception("API2PDF_KEY missing.")
+import subprocess
+import tempfile
+import os
 
+def build_weekly_pdf_cloud(html_content: str) -> BytesIO:
     full_html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -57,15 +57,35 @@ strong {{
 </html>
 """
 
-    payload = {"html": full_html}
-    headers = {"Authorization": API2PDF_KEY, "Content-Type": "application/json"}
-    response = requests.post("https://v2.api2pdf.com/chrome/pdf/html", json=payload, headers=headers)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as html_file:
+        html_file.write(full_html.encode('utf-8'))
+        html_temp_path = html_file.name
 
-    if response.status_code == 200:
-        pdf_url = response.json().get("FileUrl")
-        return BytesIO(requests.get(pdf_url).content)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as pdf_file:
+        pdf_temp_path = pdf_file.name
 
-    raise Exception(f"PDF API Error: {response.text}")
+    try:
+        script_path = os.path.join(os.path.dirname(__file__), "generate_pdf.js")
+        
+        result = subprocess.run(
+            ["node", script_path, html_temp_path, pdf_temp_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        if result.returncode != 0:
+            raise Exception(f"Playwright PDF Error: {result.stderr}")
+
+        with open(pdf_temp_path, "rb") as f:
+            pdf_bytes = f.read()
+
+        return BytesIO(pdf_bytes)
+    finally:
+        if os.path.exists(html_temp_path):
+            os.remove(html_temp_path)
+        if os.path.exists(pdf_temp_path):
+            os.remove(pdf_temp_path)
 
 async def send_weekly_notes(context: ContextTypes.DEFAULT_TYPE, manual_chatid: int = None):
     # Fetch last 7 days of lessons
@@ -98,10 +118,10 @@ async def send_weekly_notes(context: ContextTypes.DEFAULT_TYPE, manual_chatid: i
     )
 
     try:
-        if not client:
-             raise Exception("Gemini client not initialized")
-        ai_response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        raw_html = ai_response.text.strip().replace("```html", "").replace("```", "")
+        from services.gemini import generate_content_with_fallback
+        
+        raw_html = generate_content_with_fallback(contents=prompt)
+        raw_html = raw_html.strip().replace("```html", "").replace("```", "")
 
         pdf_bytes = build_weekly_pdf_cloud(raw_html).getvalue()
         

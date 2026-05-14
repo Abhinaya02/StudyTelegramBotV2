@@ -15,15 +15,80 @@ except Exception as e:
     client = None
 
 def get_base_prompt():
-    return """You are an expert curriculum designer. 
+    return """You are the Lead AFCAT Curriculum Designer at the Air Force Intelligence Cell. 
 TASK:
-1. Provide 3 major recent global news summaries.
-2. Teach 1 common English Idiom with an origin story and example.
-3. Create 3 Multiple Choice Questions.
+1. Provide 3 major recent global news summaries with tactical relevance.
+2. Teach 1 high-frequency English Idiom with origin and officer-context example.
+3. Create 3 Multiple Choice Questions (Vocab, Idiom, GK).
 
-FORMAT INSTRUCTIONS:
-Use Telegram-friendly Markdown (Bold *text*, Italics _text_).
-Do not use markdown headers (like # heading) as Telegram does not support them."""
+🚨 STRICT FORMATTING:
+1. Use ONLY <b> for bold and <i> for italics.
+2. ABSOLUTELY NO MARKDOWN (* or **). NO headers (#).
+3. Professional, disciplined tone throughout."""
+
+def generate_content_with_fallback(contents: str, **kwargs) -> str:
+    """Attempt to generate content using multiple models in case of failure (like 503 HTTP errors)."""
+    import time
+    if not client:
+         return "❌ Generative AI client is not configured."
+         
+    models = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-25', 'gemini-2.0-pro-exp-02-05']
+    last_error = None
+    
+    for model_name in models:
+        for attempt in range(2): # Try each model 2 times if 503 or 429
+            try:
+                logging.info(f"Trying model {model_name} (Attempt {attempt + 1})...")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    **kwargs
+                )
+                return response.text
+            except Exception as e:
+                error_str = str(e)
+                logging.warning(f"Failed to generate with {model_name}: {error_str}")
+                last_error = e
+                if "503" in error_str or "429" in error_str:
+                    logging.info("Sleeping before retry...")
+                    time.sleep(15) # Wait 15s to clear rate limits
+                else:
+                    break # Skip to next model if it's 404 or other error
+            
+    logging.error(f"All models failed for content generation. Last error: {last_error}")
+    raise Exception(f"Failed to generate content: {last_error}")
+
+async def generate_content_with_fallback_async(contents: str, **kwargs) -> str:
+    """Attempt to asynchronously generate content using multiple models in case of failure (like 503 HTTP errors)."""
+    import asyncio
+    if not client:
+         return "❌ Generative AI client is not configured."
+         
+    models = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-25', 'gemini-2.0-pro-exp-02-05']
+    last_error = None
+    
+    for model_name in models:
+        for attempt in range(2):
+            try:
+                logging.info(f"Trying async model {model_name} (Attempt {attempt + 1})...")
+                response = await client.aio.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    **kwargs
+                )
+                return response.text
+            except Exception as e:
+                error_str = str(e)
+                logging.warning(f"Failed to generate async with {model_name}: {error_str}")
+                last_error = e
+                if "503" in error_str or "429" in error_str:
+                    logging.info("Sleeping before retry...")
+                    await asyncio.sleep(15) # Wait 15s to clear rate limits
+                else:
+                    break # Skip to next model
+            
+    logging.error(f"All models failed for async content generation. Last error: {last_error}")
+    raise Exception(f"Failed to generate async content: {last_error}")
 
 def generate_daily_content(source_text: str = None) -> str:
     """Generate content, optionally based on a source text."""
@@ -35,13 +100,8 @@ def generate_daily_content(source_text: str = None) -> str:
         prompt = f"Based on this SOURCE_TEXT: {source_text}\n\n{prompt}"
         
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-        )
-        return response.text
+        return generate_content_with_fallback(contents=prompt)
     except Exception as e:
-        logging.error(f"Gemini generation error: {e}")
         return f"❌ Error generating content: {e}"
 
 def save_to_content_queue(admin_id: int, content_text: str) -> str:
